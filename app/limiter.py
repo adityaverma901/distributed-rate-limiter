@@ -10,12 +10,12 @@ class TokenBucket:
         """
           self.capacity=capacity
           self.refill_rate=refill_rate
-          self.bucket={}         
+          self.buckets={}         
           """self.buckets = {
             "user_101": {"tokens": 5},
             "user_102": {"tokens": 8}
         }"""
-          self.lock=threading.lock()
+          self.lock=threading.Lock()
 
     def allow_request(self, key: str, requested: int = 1) -> tuple[bool, float]:
         with self.lock: #is block ke andar jo bhi ho raha hai, wo atomic hai (koi aur thread interrupt nahi kar sakta).
