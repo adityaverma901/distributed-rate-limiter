@@ -54,6 +54,31 @@ An in-memory store (plain Python dict) only works for a single server process. I
 
 **Note:** the current Redis read (`HGETALL`) and write (`HSET`) are two separate commands, not one atomic operation. Under concurrent requests, this can allow more requests through than the configured limit (a classic check-then-act race condition). Phase 3 fixes this by moving the read-check-write logic into a single atomic Redis Lua script.
 
+
+## Why Lua Scripts? (Race Condition Deep Dive)
+
+We used Redis to store token bucket state. Initially, all the calculation
+logic — refill, checking available tokens, decrementing — happened in
+Python, and we talked to Redis using two separate commands: one `HGETALL`
+to read, one `HSET` to write. Between these two commands there was a small
+time gap, and if multiple requests arrived at the same time, they would
+all read the same stale value before any of them wrote their update back.
+This is a classic check-then-act race condition.
+
+Verified this practically with a concurrent test: 20 requests fired in
+parallel against a bucket with `capacity=5`. Without Lua, all 20 requests
+were allowed — a clear overshoot of the configured limit.
+
+**The fix:** move the entire read-calculate-write logic into a single Lua
+script that executes inside Redis itself. Because Redis is single-threaded
+and Lua scripts run atomically, no other client can interleave a command
+in the middle of that execution — the read, the refill calculation, the
+allow/deny decision, and the write all happen as one indivisible unit.
+
+Re-running the same concurrent test after the Lua fix: only 5 requests
+were allowed, 15 correctly rejected — matching the configured capacity
+exactly.
+
 ## Setup
 
 ### Prerequisites
