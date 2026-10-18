@@ -12,7 +12,7 @@ from app.redis_client import RedisClient
 #         """
 #           self.capacity=capacity
 #           self.refill_rate=refill_rate
-#           self.buckets={}          # this used to store thent data of each user in RAM 
+#           self.buckets={}          # this used to store the data of each user in RAM 
 #           """self.buckets = {
 #             "user_101": {"tokens": 5},
 #             "user_102": {"tokens": 8}
@@ -53,5 +53,29 @@ class TokenBucket:
         now = time.time()
         bucket_key=f"bucket:{key}"
         data= await self.redis.hgetall(bucket_key)
+
+
+        if not data:
+            # bucket does not exist, create it
+            tokens=self.capacity
+            last_refill=now
+        else:
+            tokens=float(data[tokens])
+            last_refill=float(data[last_refill])
+
+        elapsed= now - last_refill      # kitna time beeta purani req me 
+        tokens= min(self.capacity, tokens+elapsed*self.refill_rate)     # find the token- minimum(capacity, ya new token generated) me se - 
+
+        allowed=False
+        if (tokens>= requested):
+            tokens -= requested
+            allowed= True
+
+        await self.redis.hset(bucket_key, mapping={"tokens":tokens,"last_refill":last_refill})
+        await self.redis.expire(bucket_key,3600)
+
+        return allowed, tokens
+
+    
 
 
