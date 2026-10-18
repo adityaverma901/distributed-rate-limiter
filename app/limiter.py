@@ -49,7 +49,7 @@ class TokenBucket:
     #         return False, bucket["tokens"]
         
 
-    async def allow_request(self, key:str, requested:int)->tuple[bool ,float]:
+    async def allow_request(self, key:str, requested:int=1)->tuple[bool ,float]:
         now = time.time()
         bucket_key=f"bucket:{key}"
         data= await self.redis.hgetall(bucket_key)
@@ -60,8 +60,8 @@ class TokenBucket:
             tokens=self.capacity
             last_refill=now
         else:
-            tokens=float(data[tokens])
-            last_refill=float(data[last_refill])
+            tokens=float(data["tokens"])
+            last_refill=float(data["last_refill"])
 
         elapsed= now - last_refill      # kitna time beeta purani req me 
         tokens= min(self.capacity, tokens+elapsed*self.refill_rate)     # find the token- minimum(capacity, ya new token generated) me se - 
@@ -71,7 +71,7 @@ class TokenBucket:
             tokens -= requested
             allowed= True
 
-        await self.redis.hset(bucket_key, mapping={"tokens":tokens,"last_refill":last_refill})
+        await self.redis.hset(bucket_key, mapping={"tokens":tokens,"last_refill":now})
         await self.redis.expire(bucket_key,3600)
 
         return allowed, tokens
